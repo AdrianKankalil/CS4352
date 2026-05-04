@@ -1,7 +1,6 @@
 /*
  * scheduler_os.cpp
  * CS 4352 - Operating Systems
- * Sim Singh | R11815168
  */
 
 #include <iostream>
