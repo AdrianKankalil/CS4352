@@ -1,6 +1,5 @@
 # Makefile
 # CS 4352 - Operating Systems
-# Sim Singh | R11815168
 
 CXX      = g++
 CXXFLAGS = -std=c++17 -Wall -pthread
