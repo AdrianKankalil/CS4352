@@ -17,6 +17,7 @@
 #include <climits>
 #include <curl/curl.h>
 
+// One elevator bay which stores both the static config from the file and the live status we poll from the server
 struct ElevatorBay {
     std::string name;
     int lowestFloor;
@@ -33,6 +34,7 @@ struct Person {
     int endFloor;
 };
 
+// Pairing a person with the elevator we picked for them, ready to be sent off by the output thread
 struct Assignment {
     std::string personID;
     std::string elevatorID;
