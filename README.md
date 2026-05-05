@@ -2,9 +2,9 @@
 
 ## Overview
 
-This repository contains the CS4352 Operating Systems group project for an elevator scheduling simulation. The program is written in C++ and communicates with a local simulation server through HTTP requests using libcurl.
+This repository is for the CS4352 project of an elevator scheduling simulation done in C++. The simulator uses HTTP requests via libcurl to communicate with the local simulation server.
 
-The scheduler reads a building configuration file, connects to the simulation server using a provided port number, receives incoming passenger requests, assigns passengers to elevators, and sends those assignments back to the server.
+The scheduler takes a building configuration file, contacts the simulation server with the provided port number, receives incoming passenger requests, assigns them to elevators, and returns those assignments to the server.
 
 ## Team Members
 
