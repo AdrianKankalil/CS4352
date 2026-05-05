@@ -40,24 +40,29 @@ struct Assignment {
     std::string elevatorID;
 };
 
+// Base URL built from the port arg, e.g. http://127.0.0.1:8080
 std::string              g_baseURL;
 std::vector<ElevatorBay> g_bays;
 std::mutex               g_baysMtx;
 std::atomic<bool>        g_done(false);
 
+// People waiting to be scheduled
 std::queue<Person>       g_personQueue;
 std::mutex               g_personMtx;
 std::condition_variable  g_personCV;
 
+// Assignments waiting to be sent to the server
 std::queue<Assignment>   g_assignQueue;
 std::mutex               g_assignMtx;
 std::condition_variable  g_assignCV;
 
+// libcurl write callback, just appends the response body to a string
 static size_t writeCB(void* ptr, size_t size, size_t nmemb, std::string* out) {
     out->append((char*)ptr, size * nmemb);
     return size * nmemb;
 }
 
+//the server just needs the URL params
 std::string httpGet(const std::string& url) {
     CURL* curl = curl_easy_init();
     std::string resp;
@@ -93,6 +98,7 @@ std::string trim(const std::string& s) {
     return s.substr(a, b - a + 1);
 }
 
+// Splits on a delimiter and trims each token
 std::vector<std::string> splitOn(const std::string& s, char delim) {
     std::vector<std::string> out;
     std::istringstream ss(s);
@@ -102,6 +108,7 @@ std::vector<std::string> splitOn(const std::string& s, char delim) {
     return out;
 }
 
+// Parses the building, tab separated: name, low, high, start floor, capacity
 bool parseBuildingFile(const std::string& path) {
     std::ifstream file(path);
     if (!file.is_open()) {
@@ -127,6 +134,7 @@ bool parseBuildingFile(const std::string& path) {
     return !g_bays.empty();
 }
 
+// Hits the server for one elevator's current state and updates our local copy, Response format is name|floor|direction|??|remaining
 void updateBayStatus(ElevatorBay& bay) {
     std::string resp = httpGet(g_baseURL + "/ElevatorStatus/" + bay.name);
     if (resp.empty()) return;
@@ -139,25 +147,32 @@ void updateBayStatus(ElevatorBay& bay) {
     } catch (...) {}
 }
 
+// Refreshes every bay we don't do this on every assignment because the HTTP round trips add up fast
 void refreshStatuses() {
     std::lock_guard<std::mutex> lk(g_baysMtx);
     for (auto& bay : g_bays)
         updateBayStatus(bay);
 }
 
+// Ask the sim if it's finished so we know when to stop polling
 bool simComplete() {
     std::string resp = httpGet(g_baseURL + "/Simulation/check");
     return resp.find("complete") != std::string::npos ||
            resp.find("stopped")  != std::string::npos;
 }
 
+// Lower score = better elevator for this person.
+// Returns INT_MAX if the elevator can't serve this person at all.
+// The heuristic: distance to pickup, penalize wrong direction,
+// Prefer elevators with more capacity left.
 int scoreElevator(const ElevatorBay& bay, const Person& p) {
+    // can this elevator even reach both floors?
     if (p.startFloor < bay.lowestFloor  || p.startFloor > bay.highestFloor) return INT_MAX;
     if (p.endFloor   < bay.lowestFloor  || p.endFloor   > bay.highestFloor) return INT_MAX;
     if (bay.remaining <= 0) return INT_MAX;
 
     int dist = std::abs(bay.currentFloor - p.startFloor);
-
+// reward elevators already heading the right way and penalize ones going the opposite direction
     int dirBonus = 0;
     bool goingUp   = (p.startFloor > bay.currentFloor);
     bool goingDown = (p.startFloor < bay.currentFloor);
@@ -169,6 +184,7 @@ int scoreElevator(const ElevatorBay& bay, const Person& p) {
     return dist + dirBonus - bay.remaining;
 }
 
+// subtract remaining so a half empty elevator beats a nearly-full one at the same distance
 std::string pickBestElevator(const Person& p) {
     std::lock_guard<std::mutex> lk(g_baysMtx);
     int bestScore    = INT_MAX;
@@ -183,6 +199,7 @@ std::string pickBestElevator(const Person& p) {
     return best;
 }
 
+// Optimistically decrement capacity so back-to-back assignments don't pile onto the same elevator before the next status refresh
 void decrementCapacity(const std::string& elevName) {
     std::lock_guard<std::mutex> lk(g_baysMtx);
     for (auto& bay : g_bays) {
@@ -193,6 +210,7 @@ void decrementCapacity(const std::string& elevName) {
     }
 }
 
+// Thread 1: polls the server for new people and pushes them onto the queue
 void inputThread() {
     while (!g_done) {
         std::string resp = trim(httpGet(g_baseURL + "/NextInput"));
@@ -224,6 +242,7 @@ void inputThread() {
     }
 }
 
+// Thread 2: takes people off the queue, picks an elevator, and hands off to output
 void schedulerThread() {
     int count = 0;
 
@@ -235,11 +254,12 @@ void schedulerThread() {
         Person p = g_personQueue.front();
         g_personQueue.pop();
         lk.unlock();
-
+// refresh every 5 people instead of every time
         if (count % 5 == 0)
             refreshStatuses();
         count++;
 
+        // no elevator could take this person right now
         std::string elevID = pickBestElevator(p);
         if (elevID.empty()) {
             std::this_thread::sleep_for(std::chrono::milliseconds(50));
@@ -261,6 +281,7 @@ void schedulerThread() {
     g_assignCV.notify_all();
 }
 
+// Thread 3: sends assignments to the server as fast as it can
 void outputThread() {
     while (true) {
         std::unique_lock<std::mutex> lk(g_assignMtx);
