@@ -51,11 +51,13 @@ std::queue<Assignment>   g_assignQueue;
 std::mutex               g_assignMtx;
 std::condition_variable  g_assignCV;
 
+// Callback function using libcurl to store HTTP response data in a string
 static size_t writeCB(void* ptr, size_t size, size_t nmemb, std::string* out) {
     out->append((char*)ptr, size * nmemb);
     return size * nmemb;
 }
 
+// Sends an HTTP GET request to the  URL and returns the response
 std::string httpGet(const std::string& url) {
     CURL* curl = curl_easy_init();
     std::string resp;
@@ -69,6 +71,7 @@ std::string httpGet(const std::string& url) {
     return resp;
 }
 
+// Sends an HTTP PUT request to the URL and returns the response
 std::string httpPut(const std::string& url) {
     CURL* curl = curl_easy_init();
     std::string resp;
@@ -84,6 +87,7 @@ std::string httpPut(const std::string& url) {
     return resp;
 }
 
+// Reads building file and stores each elevator bay in g_bays
 bool parseBuildingFile(const std::string& path) {
     std::ifstream file(path);
     if (!file.is_open()) {
@@ -106,6 +110,7 @@ bool parseBuildingFile(const std::string& path) {
     return !g_bays.empty();
 }
 
+// Removes spaces, tabs, and newlines from the start and end of a string
 std::string trim(const std::string& s) {
     size_t a = s.find_first_not_of(" \t\r\n");
     if (a == std::string::npos) return "";
@@ -113,6 +118,7 @@ std::string trim(const std::string& s) {
     return s.substr(a, b - a + 1);
 }
 
+// Splits a string into smaller pieces using given delimiter
 std::vector<std::string> splitOn(const std::string& s, char delim) {
     std::vector<std::string> out;
     std::istringstream ss(s);
@@ -121,13 +127,14 @@ std::vector<std::string> splitOn(const std::string& s, char delim) {
         out.push_back(trim(tok));
     return out;
 }
-
+// Checks with the simulation server to see if the simulation is complete
 bool simComplete() {
     std::string resp = httpGet(g_baseURL + "/Simulation/check");
     return resp.find("complete") != std::string::npos ||
            resp.find("stopped")  != std::string::npos;
 }
 
+// Selects the first available elevator that can serve both the person's start and end floors
 std::string pickElevator(const Person& p) {
     for (auto& bay : g_bays) {
         if (p.startFloor >= bay.lowestFloor && p.startFloor <= bay.highestFloor &&
@@ -137,6 +144,7 @@ std::string pickElevator(const Person& p) {
     return "";
 }
 
+// Thread function that helps receive new people from the simulation server
 void inputThread() {
     while (!g_done) {
         std::string resp = trim(httpGet(g_baseURL + "/NextInput"));
@@ -168,6 +176,7 @@ void inputThread() {
     }
 }
 
+// Thread function that assigns people to the elevators
 void schedulerThread() {
     while (!g_done) {
         std::unique_lock<std::mutex> lk(g_personMtx);
@@ -189,6 +198,7 @@ void schedulerThread() {
     g_assignCV.notify_all();
 }
 
+// Thread function that sends the elevator assignments back to simulation server
 void outputThread() {
     while (true) {
         std::unique_lock<std::mutex> lk(g_assignMtx);
@@ -203,8 +213,9 @@ void outputThread() {
         httpPut(url);
     }
 }
+
 // Main function. 
-// This validates arguments, loads data, starts the simulation, creates worker threads, and waits for them to finish.
+// This validates arguments, loads data, starts the simulation, creates worker threads, and waits to finish
 int main(int argc, char* argv[]) {
     if (argc < 3) {
         std::cerr << "Usage: scheduler_os <building_file> <port>" << std::endl;
