@@ -13,6 +13,7 @@
 #include <mutex>
 #include <curl/curl.h>
 
+// Stores information for an elevator bay
 struct ElevatorBay {
     std::string name;
     int lowestFloor;
@@ -30,6 +31,7 @@ static size_t writeCB(void* ptr, size_t size, size_t nmemb, std::string* out) {
     return size * nmemb;
 }
 
+// Sends a GET request to the  URL and returns server response
 std::string httpGet(const std::string& url) {
     CURL* curl = curl_easy_init();
     std::string resp;
@@ -43,6 +45,7 @@ std::string httpGet(const std::string& url) {
     return resp;
 }
 
+// Sends an  PUT request to the  URL and returns server response
 std::string httpPut(const std::string& url) {
     CURL* curl = curl_easy_init();
     std::string resp;
@@ -58,6 +61,7 @@ std::string httpPut(const std::string& url) {
     return resp;
 }
 
+// Reads building file and stores each elevator bay in global bay list
 bool parseBuildingFile(const std::string& path) {
     std::ifstream file(path);
     if (!file.is_open()) {
@@ -80,21 +84,26 @@ bool parseBuildingFile(const std::string& path) {
     return !g_bays.empty();
 }
 
+// Input thread
 void inputThread() {
     std::lock_guard<std::mutex> lk(g_printMtx);
     std::cout << "input thread running" << std::endl;
 }
 
+// Scheduler thread
 void schedulerThread() {
     std::lock_guard<std::mutex> lk(g_printMtx);
     std::cout << "scheduler thread running" << std::endl;
 }
 
+// Output thread
 void outputThread() {
     std::lock_guard<std::mutex> lk(g_printMtx);
     std::cout << "output thread running" << std::endl;
 }
 
+// Main function validating the input, loads builing file
+// starts simulation, creates threads, & cleans up resources
 int main(int argc, char* argv[]) {
     if (argc < 3) {
         std::cerr << "Usage: scheduler_os <building_file> <port>" << std::endl;
