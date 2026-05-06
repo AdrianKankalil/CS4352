@@ -17,6 +17,7 @@
 #include <chrono>
 #include <curl/curl.h>
 
+// Stores information about an elevator bay
 struct ElevatorBay {
     std::string name;
     int lowestFloor;
@@ -25,17 +26,19 @@ struct ElevatorBay {
     int capacity;
 };
 
+// Stores information about one person requesting an elevator
 struct Person {
     std::string id;
     int startFloor;
     int endFloor;
 };
-
+// Stores the final assignment of a person to the elevator
 struct Assignment {
     std::string personID;
     std::string elevatorID;
 };
 
+// Global shared data used by the input, scheduler, and output threads to safely communicate
 std::string              g_baseURL;
 std::vector<ElevatorBay> g_bays;
 std::atomic<bool>        g_done(false);
@@ -200,7 +203,8 @@ void outputThread() {
         httpPut(url);
     }
 }
-
+// Main function. 
+// This validates arguments, loads data, starts the simulation, creates worker threads, and waits for them to finish.
 int main(int argc, char* argv[]) {
     if (argc < 3) {
         std::cerr << "Usage: scheduler_os <building_file> <port>" << std::endl;
